@@ -3,7 +3,11 @@ from api.worker import analyser_video_task
 from src.llm.coach_agent import TacticalCoachAgent
 from celery.result import AsyncResult
 from api.worker import celery_app
+from api.database import engine, Base
+import api.models
 
+# Création automatique des tables au démarrage de l'API
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="TacticalTwin AI API")
 agent_coach = TacticalCoachAgent(model_name="mistral")
