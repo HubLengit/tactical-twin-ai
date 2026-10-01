@@ -14,7 +14,7 @@ POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 
 # L'URL de connexion pointe vers notre conteneur Docker PostgreSQL
 SQLALCHEMY_DATABASE_URL = (
-    f"postgresql://{POSTGRES_USER}:"
+    f"postgresql+psycopg2://{POSTGRES_USER}:"
     f"{POSTGRES_PASSWORD}@"
     f"{POSTGRES_HOST}:"
     f"{POSTGRES_PORT}/"
