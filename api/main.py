@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from api.worker import analyser_video_task
 from src.llm.coach_agent import TacticalCoachAgent
@@ -16,6 +17,15 @@ agent_coach = TacticalCoachAgent(model_name="mistral")
 
 # Initialisation du Bucket S3
 init_bucket()
+
+# --- MIDDLEWARE CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"], # Autorise uniquement votre frontend
+    allow_credentials=True,
+    allow_methods=["*"], # Autorise POST, GET, OPTIONS, etc.
+    allow_headers=["*"],
+)
 
 @app.post("/analyze/")
 async def analyze_match(video: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -59,12 +69,17 @@ async def get_tactical_report():
 
 
 @app.get("/status/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, db: Session = Depends(get_db)):
     """
-    Permet au frontend (Streamlit) de vérifier si le Worker a terminé.
+    Vérifie l'état de l'analyse dans PostgreSQL. Permet au frontend de vérifier si le Worker a terminé.
     """
-    task_result = AsyncResult(task_id, app=celery_app)
+    match = db.query(models.MatchAnalysis).filter(models.MatchAnalysis.id == task_id).first()
+    
+    if not match:
+        return {"status": "NOT_FOUND"}
+        
     return {
-        "task_id": task_id,
-        "status": task_result.status, # "PENDING", "STARTED", "SUCCESS" ou "FAILURE"
+        "task_id": match.id,
+        "status": match.status, # PENDING, SUCCESS, ou FAILED
+        "coach_report": match.coach_report
     }
