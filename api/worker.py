@@ -1,5 +1,6 @@
-from celery import Celery
 import os
+from celery import Celery
+from api.storage import download_video
 import cv2
 import numpy as np
 import torch
@@ -17,12 +18,16 @@ celery_app = Celery(
 )
 
 @celery_app.task(bind=True)
-def analyser_video_task(self, video_path: str = 'data/raw/new_game.mp4'):
+def analyser_video_task(self, s3_key: str):
     """
-    Tâche asynchrone Celery exécutant l'intégralité du pipeline de Computer Vision 
-    et de modélisation tactique sur le GPU de votre Mac (MPS).
+    Télécharge la vidéo depuis S3 puis Tâche asynchrone Celery exécutant l'intégralité du pipeline de Computer Vision
     """
-    print(f"⚙️ [WORKER] Démarrage de l'analyse asynchrone pour : {video_path}")
+    print(f"⚙️ [WORKER] Démarrage de la tâche pour la vidéo S3 : {s3_key}")
+
+    # 1. Téléchargement depuis MinIO vers un espace temporaire local du worker
+    os.makedirs("data/raw", exist_ok=True)
+    local_video_path = f"data/raw/{s3_key}"
+    download_video(s3_key, local_video_path)
     
     # 1. Configuration du Device (Mac M2 - MPS)
     device = 'mps' if torch.backends.mps.is_available() else 'cpu'
@@ -36,10 +41,10 @@ def analyser_video_task(self, video_path: str = 'data/raw/new_game.mp4'):
     modele_joueurs.to(device)
 
     # 3. Initialisation de la vidéo
-    if not os.path.exists(video_path):
-        return {"status": "error", "message": f"Fichier vidéo introuvable : {video_path}"}
+    if not os.path.exists(local_video_path):
+        return {"status": "error", "message": f"Fichier vidéo introuvable : {local_video_path}"}
 
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(local_video_path)
     fps_video = cap.get(cv2.CAP_PROP_FPS)
     if fps_video <= 0:
         fps_video = 30.0 # Valeur de repli sécurisée
@@ -187,7 +192,7 @@ def analyser_video_task(self, video_path: str = 'data/raw/new_game.mp4'):
     events_path = "data/processed/tactical_events.json"
     moteur_tactique.exporter_donnees(state_path, events_path)
     
-    print(f"✅ [WORKER] Analyse terminée avec succès pour {video_path}")
+    print(f"✅ [WORKER] Analyse terminée avec succès pour {local_video_path}")
     return {
         "status": "success",
         "video_output": out_video_path,

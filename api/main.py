@@ -1,10 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Depends
+from sqlalchemy.orm import Session
 from api.worker import analyser_video_task
 from src.llm.coach_agent import TacticalCoachAgent
 from celery.result import AsyncResult
 from api.worker import celery_app
-from api.database import engine, Base
-import api.models
+from api.database import engine, Base, get_db
+from api.storage import init_bucket, upload_stream
+import api.models as models
 
 # Création automatique des tables au démarrage de l'API
 Base.metadata.create_all(bind=engine)
@@ -12,18 +14,34 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="TacticalTwin AI API")
 agent_coach = TacticalCoachAgent(model_name="mistral")
 
+# Initialisation du Bucket S3
+init_bucket()
+
 @app.post("/analyze/")
-async def analyze_match(video_path: str):
+async def analyze_match(video: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    Route appelée par l'utilisateur. 
-    Elle délègue immédiatement la tâche à Celery et libère la connexion.
+    Reçoit le fichier vidéo, l'uploade sur S3, crée un enregistrement en BDD 
+    et délègue le traitement GPU à Celery.
     """
-    # .delay() envoie l'ordre à Redis de manière asynchrone
-    task = analyser_video_task.delay(video_path)
+    # 1. Upload vers S3 (MinIO)
+    s3_key = upload_stream(video.file, video.filename)
+
+    # 2. Déclenchement du Worker Celery avec la clé S3 (.delay() envoie l'ordre à Redis de manière asynchrone)
+    task = analyser_video_task.delay(s3_key)
+    
+    # 3. Enregistrement initial dans PostgreSQL
+    db_match = models.MatchAnalysis(
+        id=task.id,
+        filename=video.filename,
+        status="PENDING"
+    )
+    db.add(db_match)
+    db.commit()
     
     return {
-        "message": "Vidéo bien reçue, analyse en cours d'exécution en arrière-plan.", 
-        "task_id": task.id
+        "message": "Vidéo sécurisée sur S3, analyse asynchrone démarrée.",
+        "task_id": task.id,
+        "s3_key": s3_key
     }
 
 @app.get("/report/")
