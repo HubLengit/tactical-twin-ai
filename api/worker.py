@@ -205,8 +205,25 @@ def analyser_video_task(self, s3_key: str):
         if match:
             match.status = "SUCCESS"
             match.coach_report = rapport_final
+            
+            # --- AJOUT : Insertion des événements tactiques en Base de données ---
+            import json
+            if os.path.exists(events_path):
+                with open(events_path, 'r') as f:
+                    evenements = json.load(f)
+                    for ev in evenements:
+                        db_event = models.TacticalEvent(
+                            match_id=match.id,
+                            timestamp=ev.get("timestamp", 0.0),
+                            event_type=ev.get("event", "unknown"),
+                            team=str(ev.get("team", "")),
+                            details=ev # On peut stocker tout l'objet JSON (y compris evidence/duration)
+                        )
+                        db.add(db_event)
+            # -------------------------------------------------------------------
+
             db.commit()
-            print("✅ [WORKER] Base de données mise à jour avec succès.")
+            print("✅ [WORKER] Base de données mise à jour avec succès (Match + Événements).")
         return {
             "status": "success",
             "video_output": out_video_path,
