@@ -8,6 +8,8 @@ from api.worker import celery_app
 from api.database import engine, Base, get_db
 from api.storage import init_bucket, upload_stream
 import api.models as models
+import api.schemas as schemas
+from typing import List
 
 # Création automatique des tables au démarrage de l'API
 Base.metadata.create_all(bind=engine)
@@ -83,3 +85,20 @@ async def get_task_status(task_id: str, db: Session = Depends(get_db)):
         "status": match.status, # PENDING, SUCCESS, ou FAILED
         "coach_report": match.coach_report
     }
+
+
+@app.get("/matches/", response_model=List[schemas.MatchResponse])
+async def get_matches(db: Session = Depends(get_db)):
+    """
+    Retrieve all uploaded matches, ordered by creation date (newest first).
+    """
+    matches = db.query(models.MatchAnalysis).order_by(models.MatchAnalysis.created_at.desc()).all()
+    return matches
+
+@app.get("/matches/{match_id}/events", response_model=List[schemas.TacticalEventResponse])
+async def get_match_events(match_id: str, db: Session = Depends(get_db)):
+    """
+    Retrieve all tactical events associated with a specific match.
+    """
+    events = db.query(models.TacticalEvent).filter(models.TacticalEvent.match_id == match_id).order_by(models.TacticalEvent.timestamp.asc()).all()
+    return events
