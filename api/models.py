@@ -3,6 +3,15 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from api.database import Base
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    
+    matches = relationship("MatchAnalysis", back_populates="owner")
+
 class MatchAnalysis(Base):
     __tablename__ = "matches"
 
@@ -11,6 +20,9 @@ class MatchAnalysis(Base):
     status = Column(String, default="PENDING") # PENDING, PROCESSING, SUCCESS, FAILED
     coach_report = Column(String, nullable=True) # Le texte généré par l'Agent LLM
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True) # Temporarily nullable for backwards compatibility
+    owner = relationship("User", back_populates="matches")
     
     events = relationship("TacticalEvent", back_populates="match")
 

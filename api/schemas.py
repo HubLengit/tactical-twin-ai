@@ -2,6 +2,20 @@ from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Any
 from datetime import datetime
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
 class TacticalEventResponse(BaseModel):
     id: int
     timestamp: float

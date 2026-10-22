@@ -6,7 +6,8 @@ from sqlalchemy.orm import sessionmaker
 
 from api.main import app, get_db
 from api.database import Base
-from api.models import MatchAnalysis, TacticalEvent
+from api.models import MatchAnalysis, TacticalEvent, User
+from api.auth import get_current_user
 
 # Setup an in-memory SQLite database for testing
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -20,7 +21,12 @@ def override_get_db():
     finally:
         db.close()
 
+# Mock current user
+def override_get_current_user():
+    return User(id=1, email="test@example.com", hashed_password="hashed")
+
 app.dependency_overrides[get_db] = override_get_db
+app.dependency_overrides[get_current_user] = override_get_current_user
 
 class TestAPI(unittest.TestCase):
     @classmethod
@@ -37,6 +43,7 @@ class TestAPI(unittest.TestCase):
         db = TestingSessionLocal()
         db.query(MatchAnalysis).delete()
         db.query(TacticalEvent).delete()
+        db.query(User).delete()
         db.commit()
         db.close()
 
@@ -73,8 +80,10 @@ class TestAPI(unittest.TestCase):
     def test_get_match_events(self):
         # Insert test data
         db = TestingSessionLocal()
-        match = MatchAnalysis(id="test_match", filename="test.mp4", status="SUCCESS")
+        user = User(id=1, email="test@example.com", hashed_password="fake")
+        match = MatchAnalysis(id="test_match", filename="test.mp4", status="SUCCESS", owner_id=1)
         event = TacticalEvent(match_id="test_match", timestamp=10.5, event_type="goal", team="A")
+        db.add(user)
         db.add(match)
         db.add(event)
         db.commit()
@@ -88,4 +97,5 @@ class TestAPI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
